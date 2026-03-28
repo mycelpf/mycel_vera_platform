@@ -1,0 +1,82 @@
+PROPRIETARY SOFTWARE LICENSE
+
+Copyright (c) 2026 CogniWorks.
+All Rights Reserved.
+
+OWNERSHIP
+
+This software, including all source code, compiled binaries, container images,
+documentation, architecture, and design ("the Software"), is the exclusive
+intellectual property of the Authors. The Software was independently conceived,
+designed, and developed by the Authors.
+
+NO LICENSE GRANTED
+
+No license, right, or interest in the Software is granted to any person or
+entity by possession, access, or use of this Software, whether in source code,
+binary, container image, or any other form, except as explicitly granted in a
+separate written agreement signed by the Authors.
+
+RESTRICTIONS
+
+Without a separate written license agreement, you may not:
+
+  (a) Copy, reproduce, or duplicate the Software or any portion thereof;
+  (b) Modify, adapt, translate, or create derivative works;
+  (c) Distribute, sublicense, lease, rent, or lend the Software;
+  (d) Reverse engineer, decompile, disassemble, or attempt to derive source
+      code from compiled or containerized forms;
+  (e) Remove or alter any proprietary notices, labels, or marks;
+  (f) Use the Software for any commercial purpose;
+  (g) Transfer the Software to any third party.
+
+CONFIDENTIALITY
+
+The Software constitutes confidential and proprietary information of the
+Authors. Any person or entity who obtains access to the Software, whether
+authorized or unauthorized, shall maintain strict confidentiality and shall
+not disclose any aspect of the Software to any third party.
+
+CONTAINER DISTRIBUTIONS
+
+Where the Software is distributed in containerized form (e.g., Docker images,
+OCI images), the container and all its contents remain the exclusive property
+of the Authors. The recipient may run the container solely for the purpose
+specified in a separate service agreement. The recipient may not extract,
+inspect layers, reverse engineer, or derive any source code, configuration,
+or architecture from the container.
+
+NO WARRANTY
+
+THE SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT.
+
+LIMITATION OF LIABILITY
+
+IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER
+LIABILITY ARISING FROM THE USE OR INABILITY TO USE THE SOFTWARE.
+
+GOVERNING LAW
+
+This license shall be governed by and construed in accordance with the laws
+of the Republic of India. Any disputes shall be subject to the exclusive
+jurisdiction of the courts in India.
+
+TERMINATION
+
+Any rights granted under a separate agreement terminate immediately upon
+breach of any term of that agreement or this license. Upon termination,
+all copies of the Software must be destroyed.
+
+PRIOR ART DECLARATION
+
+The Authors declare that the mycel platform and all associated modules
+(including but not limited to mycel_core, mycel_iam, and all mycel_* named
+modules) constitute original works of authorship created independently by the
+Authors. This declaration is made pursuant to Section 17 of the Indian
+Copyright Act, 1957.
+
+CONTACT
+
+

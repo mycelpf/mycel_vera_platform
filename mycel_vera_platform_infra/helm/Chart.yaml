@@ -1,0 +1,6 @@
+apiVersion: v2
+name: mycel_vera_platform
+description: Mycel Vera Platform
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

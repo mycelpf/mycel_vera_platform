@@ -1,0 +1,84 @@
+{{- range $name, $art := .Values.artifacts }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}
+spec:
+  replicas: {{ $.Values.replicas | default 1 }}
+  selector:
+    matchLabels:
+      app: {{ $.Release.Name }}-{{ $name }}
+  template:
+    metadata:
+      labels:
+        app: {{ $.Release.Name }}-{{ $name }}
+        {{- with $art.labels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      containers:
+        - name: {{ $name }}
+          image: "{{ $.Values.image.registry }}{{ $art.image }}:{{ $art.tag | default "latest" }}"
+          imagePullPolicy: {{ $.Values.image.pullPolicy | default "IfNotPresent" }}
+          {{- with $art.command }}
+          command: {{ toJson . }}
+          {{- end }}
+          ports:
+            - containerPort: {{ $art.targetPort }}
+          env:
+            {{- range $k, $v := $art.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            {{- /* Inject SERVICE_URL pointing to the service artifact via ClusterIP */ -}}
+            {{- if $art.serviceUrl }}
+            - name: SERVICE_URL
+              value: "http://{{ $.Release.Name }}-service"
+            {{- end }}
+            {{- with $art.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if $art.clusterEnv }}
+          envFrom:
+            - configMapRef:
+                name: mycel-cluster-config
+                optional: true
+            - secretRef:
+                name: mycel-cluster-secrets
+                optional: true
+            - secretRef:
+                name: {{ $.Release.Name }}-secrets
+                optional: true
+            - configMapRef:
+                name: {{ $.Release.Name }}-config
+            - configMapRef:
+                name: {{ $.Release.Name }}-db-config
+                optional: true
+          {{- end }}
+          {{- if eq ($art.probeType | default "http") "tcp" }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ $art.targetPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: {{ $art.targetPort }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          {{- else }}
+          readinessProbe:
+            httpGet:
+              path: {{ $art.probe | default "/" }}
+              port: {{ $art.targetPort }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: {{ $art.probe | default "/" }}
+              port: {{ $art.targetPort }}
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          {{- end }}
+---
+{{- end }}

@@ -1,0 +1,75 @@
+# mycel_vera_platform/mycel_vera_platform_infra/helm/values.yaml — SHIPS with release
+image:
+  registry: ""
+  pullPolicy: IfNotPresent
+
+artifacts:
+  service:
+    image: mycel_vera_platform_service
+    tag: latest
+    targetPort: 3000
+    subdomain: api
+    probe: /health
+    clusterEnv: true
+    labels:
+      egress-tier: external
+    env:
+      ACCEPT_LICENSE: "yes"
+      SERVICE_NAME: "Mycel Vera Platform"
+
+  web:
+    image: mycel_vera_platform_web
+    tag: latest
+    targetPort: 3002
+    subdomain: ""
+    probe: /
+    serviceUrl: true
+    env:
+      ACCEPT_LICENSE: "yes"
+      VITE_API_BASE_URL: "http://api.vera-platform.mycel.test"
+
+  mcp:
+    image: mycel_vera_platform_mcp
+    tag: latest
+    targetPort: 3001
+    subdomain: mcp
+    probeType: tcp
+    clusterEnv: true
+    serviceUrl: true
+    labels:
+      egress-tier: external
+    env:
+      ACCEPT_LICENSE: "yes"
+      MCP_HOST: "0.0.0.0"
+      MCP_PORT: "3001"
+      MCP_TRANSPORT: "streamable-http"
+    extraEnv:
+      - name: ROOT_MODULE_NAME
+        value: mycel_vera_platform
+      - name: MCP_REGISTRY_PATH
+        value: /tmp/mcp_registry.json
+
+  mobile:
+    image: mycel_vera_platform_mobile
+    tag: latest
+    targetPort: 3003
+    subdomain: mobile
+    probe: /
+    env:
+      ACCEPT_LICENSE: "yes"
+
+ingress:
+  slug: vera-platform
+  domain: mycel.test
+  className: traefik
+  tls: false
+  annotations: {}
+
+config:
+  ROOT_MODULE_NAME: mycel_vera_platform
+  SUBMODULES: ""
+  LOG_LEVEL: info
+  OTEL_SERVICE_NAME: mycel_vera_platform-service
+  MCP_URL: "http://mycel_vera_platform-mcp/mcp"
+
+replicas: 1

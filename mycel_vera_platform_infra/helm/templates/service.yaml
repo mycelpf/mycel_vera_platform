@@ -1,0 +1,14 @@
+{{- range $name, $art := .Values.artifacts }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $.Release.Name }}-{{ $name }}
+spec:
+  type: ClusterIP
+  selector:
+    app: {{ $.Release.Name }}-{{ $name }}
+  ports:
+    - port: 80
+      targetPort: {{ $art.targetPort }}
+---
+{{- end }}

@@ -1,0 +1,10 @@
+# mycel_vera_platform/mycel_vera_platform_infra/helm/values-dev.yaml — does NOT ship
+image:
+  pullPolicy: Never
+
+config:
+  LOG_LEVEL: debug
+
+artifacts:
+  web:
+    command: ["npx", "vite", "dev", "--host", "--port", "3002"]

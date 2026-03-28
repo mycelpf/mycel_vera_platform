@@ -1,0 +1,38 @@
+{{- $slug := .Values.ingress.slug }}
+{{- $domain := .Values.ingress.domain | default "mycel.test" }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-ingress
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web,websecure
+    {{- with .Values.ingress.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className | default "traefik" }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    - hosts:
+        {{- range $name, $art := .Values.artifacts }}
+        {{- if $art.subdomain }}
+        - {{ $art.subdomain }}.{{ $slug }}.{{ $domain }}
+        {{- else }}
+        - {{ $slug }}.{{ $domain }}
+        {{- end }}
+        {{- end }}
+      secretName: {{ .Release.Name }}-tls
+  {{- end }}
+  rules:
+    {{- range $name, $art := .Values.artifacts }}
+    - host: {{ if $art.subdomain }}{{ $art.subdomain }}.{{ end }}{{ $slug }}.{{ $domain }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $.Release.Name }}-{{ $name }}
+                port:
+                  number: 80
+    {{- end }}
