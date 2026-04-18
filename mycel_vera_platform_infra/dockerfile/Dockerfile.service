@@ -1,0 +1,98 @@
+# mycel_vera_platform/mycel_vera_platform_infra/dockerfile/Dockerfile.service
+#
+# Mycel mycel_vera_platform NestJS/Fastify service.
+# Build context: active_workspace/ (workspace root).
+#
+# Dependency chain: core_service → enterprise_service → mycel_vera_platform_service.
+
+ARG MYCEL_CORE_PATH=mycel_core
+ARG MYCEL_ENTERPRISE_PATH=mycel_enterprise
+ARG ROOT_MODULE_PATH=mycel_vera_platform
+ARG ROOT_MODULE_NAME=mycel_vera_platform
+
+# ---- Builder ----------------------------------------------------------------
+FROM node:24-alpine AS builder
+RUN apk add --no-cache openssl ca-certificates
+
+ARG MYCEL_CORE_PATH
+ARG MYCEL_ENTERPRISE_PATH
+ARG ROOT_MODULE_PATH
+ARG ROOT_MODULE_NAME
+
+WORKDIR /workspace
+
+# 1. Build mycel_core_service
+COPY ${MYCEL_CORE_PATH}/mycel_core_service ${MYCEL_CORE_PATH}/mycel_core_service/
+WORKDIR /workspace/${MYCEL_CORE_PATH}/mycel_core_service
+RUN npm ci --no-audit --no-fund
+RUN npm run build
+
+# 2. Build mycel_enterprise_service
+WORKDIR /workspace/${MYCEL_ENTERPRISE_PATH}/mycel_enterprise_service
+COPY ${MYCEL_ENTERPRISE_PATH}/mycel_enterprise_service/.npmrc        ./.npmrc
+COPY ${MYCEL_ENTERPRISE_PATH}/mycel_enterprise_service/package.json  ./
+RUN npm install --ignore-scripts --no-audit --no-fund
+COPY ${MYCEL_ENTERPRISE_PATH}/mycel_enterprise_service/src          ./src
+COPY ${MYCEL_ENTERPRISE_PATH}/mycel_enterprise_service/tsconfig*.json ./
+COPY ${MYCEL_ENTERPRISE_PATH}/mycel_enterprise_service/nest-cli.json  ./
+RUN npm run build
+
+# 3. Build mycel_vera_platform_service
+WORKDIR /workspace/${ROOT_MODULE_PATH}/${ROOT_MODULE_NAME}_service
+COPY ${ROOT_MODULE_PATH}/${ROOT_MODULE_NAME}_service/.npmrc        ./.npmrc
+COPY ${ROOT_MODULE_PATH}/${ROOT_MODULE_NAME}_service/package*.json ./
+COPY ${ROOT_MODULE_PATH}/${ROOT_MODULE_NAME}_service/prisma        ./prisma
+RUN npm install --ignore-scripts --no-audit --no-fund
+RUN npx prisma generate --schema=./prisma/schema.prisma
+COPY ${ROOT_MODULE_PATH}/${ROOT_MODULE_NAME}_service/src          ./src
+COPY ${ROOT_MODULE_PATH}/${ROOT_MODULE_NAME}_service/tsconfig*.json ./
+COPY ${ROOT_MODULE_PATH}/${ROOT_MODULE_NAME}_service/nest-cli.json  ./
+RUN npm run build
+
+# ---- Runtime ----------------------------------------------------------------
+FROM node:24-alpine
+RUN apk add --no-cache openssl ca-certificates libstdc++
+RUN addgroup -S -g 1001 appuser \
+ && adduser  -S -u 1001 -G appuser -H -s /sbin/nologin appuser
+
+ARG ROOT_MODULE_PATH=mycel_vera_platform
+ARG ROOT_MODULE_NAME=mycel_vera_platform
+WORKDIR /app
+
+COPY --from=builder --chown=1001:1001 /workspace/${ROOT_MODULE_PATH}/${ROOT_MODULE_NAME}_service/package.json  ./package.json
+COPY --from=builder --chown=1001:1001 /workspace/${ROOT_MODULE_PATH}/${ROOT_MODULE_NAME}_service/node_modules  ./node_modules
+COPY --from=builder --chown=1001:1001 /workspace/${ROOT_MODULE_PATH}/${ROOT_MODULE_NAME}_service/dist          ./dist
+COPY --from=builder --chown=1001:1001 /workspace/${ROOT_MODULE_PATH}/${ROOT_MODULE_NAME}_service/prisma        ./prisma
+
+RUN npm cache clean --force \
+ && rm -rf \
+      node_modules/typescript \
+      node_modules/@types \
+ && find node_modules \( \
+      -name "*.md"      -o \
+      -name "*.ts"      -o \
+      -name "*.map"     -o \
+      -name "LICENSE*"  -o \
+      -name "CHANGELOG*" -o \
+      -name "README*"   -o \
+      -name "test"      -type d -o \
+      -name "tests"     -type d -o \
+      -name "__tests__" -type d \
+    \) -delete 2>/dev/null || true
+
+RUN printf '#!/bin/sh\nif [ "$ACCEPT_LICENSE" != "yes" ]; then\n  echo "PROPRIETARY — set ACCEPT_LICENSE=yes"; exit 1\nfi\nexec "$@"\n' \
+      > /usr/local/bin/entrypoint.sh && chmod +x /usr/local/bin/entrypoint.sh
+
+USER appuser
+ENV NODE_ENV=production \
+    PORT=3000 \
+    NODE_OPTIONS="--max-old-space-size=384" \
+    NODE_COMPILE_CACHE=/tmp/.node-compile-cache
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:'+process.env.PORT+'/healthz', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+LABEL mycel.artifact.type="service" \
+      mycel.platform.runtime="nest-fastify" \
+      mycel.base.distro="alpine"
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["node", "dist/main.js"]
