@@ -1,0 +1,27 @@
+# mycel_vera_platform/mycel_vera_platform_infra/dockerfile/Dockerfile.mcp
+#
+# TypeScript MCP image for mycel_vera_platform.
+# FROM: ghcr.io/mycelpf/mycel_core_mcp — TypeScript MCP runtime.
+#
+# mcp_registry.json is pre-compiled by anchor (PreBuildMCPRegistry) before
+# this image is built: port-forwards to mycel-vera-platform-service, fetches /openapi.json,
+# runs compile_registry.py with mcp_config.py → writes mycel_vera_platform_mcp/mcp_registry.json.
+#
+# Build context: active_workspace/ (workspace root).
+
+ARG CORE_VERSION=latest
+FROM ghcr.io/mycelpf/mycel_core_mcp:${CORE_VERSION}
+
+ARG ROOT_MODULE_NAME=mycel_vera_platform
+ARG ROOT_MODULE_PATH=mycel_vera_platform
+
+USER root
+WORKDIR /app
+
+COPY ${ROOT_MODULE_PATH}/${ROOT_MODULE_NAME}_mcp/mcp_registry.json ./mcp_registry.json
+RUN chown appuser:appuser ./mcp_registry.json
+
+USER appuser
+
+ENV SERVICE_NAME=${ROOT_MODULE_NAME}_mcp
+ENV ROOT_MODULE_NAME=${ROOT_MODULE_NAME}
