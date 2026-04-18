@@ -26,7 +26,9 @@ artifacts:
     serviceUrl: true
     env:
       ACCEPT_LICENSE: "yes"
-      VITE_API_BASE_URL: "http://api.vera-platform.mycel.test"
+      MYCEL_IAM_API_URL: "http://api.mycel-iam.mycel.test"
+      MYCEL_ENTERPRISE_API_URL: "http://api.mycel-enterprise.mycel.test"
+      MYCEL_VERA_PLATFORM_API_URL: "http://api.mycel-vera-platform.mycel.test"
 
   mcp:
     image: mycel_vera_platform_mcp
@@ -59,7 +61,7 @@ artifacts:
       ACCEPT_LICENSE: "yes"
 
 ingress:
-  slug: vera-platform
+  slug: mycel-vera-platform
   domain: mycel.test
   className: traefik
   tls: false

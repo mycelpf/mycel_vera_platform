@@ -1,0 +1,111 @@
+name: mycel_vera_platform
+
+services:
+  mycel_vera_platform_web:
+    image: mycel_vera_platform_web
+    container_name: mycel_vera_platform_web
+    build:
+      context: ../../..
+      dockerfile: mycel_vera_platform_infra/dockerfile/Dockerfile.web
+      args:
+        ROOT_MODULE_NAME: ${ROOT_MODULE_NAME}
+        SUBMODULES: ${SUBMODULES}
+        CORE_VERSION: ${CORE_VERSION}
+    ports:
+      - "${WEB_PORT}:3002"
+    volumes:
+      # Hot reload: module web source only (core is baked into base image)
+      - ../../../${ROOT_MODULE_NAME}_web/src:/build/${ROOT_MODULE_NAME}_web/src
+    environment:
+      ACCEPT_LICENSE: "yes"
+      ROOT_MODULE_NAME: ${ROOT_MODULE_NAME}
+      SUBMODULES: ${SUBMODULES}
+      MYCEL_REGISTRY_PATH: /build/${ROOT_MODULE_NAME}_web/src/mycel_registry.ts
+      SERVICE_URL: http://mycel_vera_platform_service:3000
+      VITE_PROXY_PATHS: /api,/chat,/health,/ready
+      VITE_APP_NAME: ${ROOT_MODULE_NAME}_web
+      VITE_OTEL_EXPORTER_OTLP_ENDPOINT: ${VITE_OTEL_EXPORTER_OTLP_ENDPOINT}
+      VITE_DEPLOYMENT_ENV: dev
+    command: >
+      sh -c "cd /build/mycel_core_web &&
+             node scripts/generate-registry.js &&
+             npx vite --host --port 3002"
+    depends_on:
+      - mycel_vera_platform_service
+    networks:
+      - mycel_network
+
+  mycel_vera_platform_service:
+    image: mycel_vera_platform_service
+    container_name: mycel_vera_platform_service
+    build:
+      context: ../../..
+      dockerfile: mycel_vera_platform_infra/dockerfile/Dockerfile.service_py
+      args:
+        ROOT_MODULE_NAME: ${ROOT_MODULE_NAME}
+        SUBMODULES: ${SUBMODULES}
+        CORE_VERSION: ${CORE_VERSION}
+    ports:
+      - "${SERVICE_PORT}:3000"
+    volumes:
+      # Hot reload: module service source only (core is baked into base image)
+      - ../../../${ROOT_MODULE_NAME}_service:/app/${ROOT_MODULE_NAME}_service
+    env_file:
+      - .env
+      - path: .env.secrets
+        required: false
+    environment:
+      ACCEPT_LICENSE: "yes"
+      ROOT_MODULE_NAME: ${ROOT_MODULE_NAME}
+      SUBMODULES: ${SUBMODULES}
+      PYTHONPATH: /app/core:/app:/app/${ROOT_MODULE_NAME}_service/src
+      PYTHONUNBUFFERED: "1"
+      PYTHONOPTIMIZE: ${PYTHONOPTIMIZE}
+      LOG_LEVEL: ${LOG_LEVEL}
+      CORS_ORIGINS: http://localhost:${WEB_PORT}
+      SERVICE_NAME: ${SERVICE_NAME}
+      SERVICE_VERSION: ${SERVICE_VERSION}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT}
+      DEPLOYMENT_ENV: dev
+      MCP_URL: http://mycel_vera_platform_mcp:3001/mcp
+    command: python -m uvicorn src.main:app --host 0.0.0.0 --port 3000 --reload --loop uvloop --http httptools
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    stop_grace_period: 30s
+    networks:
+      - mycel_network
+
+  mycel_vera_platform_mcp:
+    image: mycel_vera_platform_mcp
+    container_name: mycel_vera_platform_mcp
+    build:
+      context: ../../..
+      dockerfile: mycel_vera_platform_infra/dockerfile/Dockerfile.mcp_py
+      args:
+        ROOT_MODULE_NAME: ${ROOT_MODULE_NAME}
+        CORE_VERSION: ${CORE_VERSION}
+    ports:
+      - "${MCP_PORT}:3001"
+    environment:
+      ACCEPT_LICENSE: "yes"
+      ROOT_MODULE_NAME: ${ROOT_MODULE_NAME}
+      MCP_REGISTRY_PATH: /tmp/mcp_registry.json
+      SERVICE_URL: http://mycel_vera_platform_service:3000
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 3001
+      MCP_TRANSPORT: streamable-http
+    volumes:
+      # Dev: mount module MCP artifacts for hot-swap (run build.sh, restart container)
+      - ../../../${ROOT_MODULE_NAME}_mcp:/app/mcp_module
+    depends_on:
+      - mycel_vera_platform_service
+    networks:
+      - mycel_network
+
+networks:
+  mycel_network:
+    name: mycel_network
+    driver: bridge

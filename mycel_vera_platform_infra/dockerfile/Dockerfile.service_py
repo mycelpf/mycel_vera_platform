@@ -1,0 +1,51 @@
+# mycel_vera_platform/mycel_vera_platform_infra/dockerfile/Dockerfile.service
+#
+# Release-based module image for mycel_vera_platform service.
+# FROM: ghcr.io/mycelpf/mycel_enterprise_service (pre-built enterprise base image).
+#
+# Base image provides:
+#   /app/core/src/       core Python source
+#   /app/LICENSE          proprietary license
+#   uvicorn binary
+#   PYTHONPATH=/app/core:/app
+#   USER appuser (uid 1000)
+#   ENTRYPOINT           license gate (requires ACCEPT_LICENSE=yes)
+
+ARG ENTERPRISE_VERSION=latest
+
+FROM ghcr.io/mycelpf/mycel_enterprise_service:${ENTERPRISE_VERSION}
+
+ARG ROOT_MODULE_NAME=mycel_vera_platform
+ARG SUBMODULES=""
+
+USER root
+WORKDIR /app
+
+# Install module Python dependencies
+COPY ${ROOT_MODULE_NAME}_service_py/pyproject.toml ./${ROOT_MODULE_NAME}_service/
+RUN pip install --no-cache-dir ./${ROOT_MODULE_NAME}_service/
+
+# Copy full module source (includes routes.py shim + src/)
+COPY ${ROOT_MODULE_NAME}_service_py/ ./${ROOT_MODULE_NAME}_service/
+
+# Compile module source to .pyc, promote to package level, strip .py.
+RUN find ./${ROOT_MODULE_NAME}_service/ -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null; \
+    python -OO -m compileall -q ./${ROOT_MODULE_NAME}_service/ \
+    && find ./${ROOT_MODULE_NAME}_service/ -path '*/__pycache__/*.pyc' | while read pyc; do \
+         dir="$(dirname "$(dirname "$pyc")")"; \
+         base="$(basename "$pyc" | sed 's/\.cpython-[0-9]*\.\{0,1\}\(opt-[0-9]*\.\)\{0,1\}pyc/.pyc/')"; \
+         cp "$pyc" "$dir/$base"; \
+       done \
+    && find ./${ROOT_MODULE_NAME}_service/ -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null; true \
+    && find ./${ROOT_MODULE_NAME}_service/ -name "*.py" -type f -delete
+
+ENV PYTHONPATH=/app/core:/app:/app/${ROOT_MODULE_NAME}_service/src
+ENV ROOT_MODULE_NAME=${ROOT_MODULE_NAME}
+ENV SUBMODULES=${SUBMODULES}
+
+# License
+COPY LICENSE ./LICENSE
+
+EXPOSE 3000
+USER appuser
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "3000"]

@@ -1,0 +1,49 @@
+# mycel_vera_platform/mycel_vera_platform_infra/dockerfile/Dockerfile.mcp
+#
+# Release-based MCP image. Base provides MCP runtime + compile scripts.
+#
+# Base image provides:
+#   /app/src/              core MCP server source
+#   /app/mcp_scripts/      compile_registry.py, extract_spec.py, analysis module
+#   mcp + httpx installed
+#   appuser (uid 1000)
+#   ENTRYPOINT             license gate (requires ACCEPT_LICENSE=yes)
+#   Working dir /app
+#
+# Two startup modes:
+#   1. Pre-compiled (fast): mcp_module/mcp_registry.json exists -> copy + start.
+#   2. Live-compile (fallback): poll service, fetch OpenAPI, compile basic registry.
+
+ARG CORE_VERSION=latest
+
+FROM ghcr.io/mycelpf/mycel_core_mcp:${CORE_VERSION}
+
+ARG ROOT_MODULE_NAME=mycel_vera_platform
+
+# Copy module MCP artifacts (config, analysis, pre-compiled registry if available).
+# In dev, docker-compose volume mount overrides this directory.
+USER root
+COPY ${ROOT_MODULE_NAME}_mcp/ ./mcp_module/
+RUN chown -R appuser:appuser ./mcp_module/
+
+USER appuser
+
+ENV ROOT_MODULE_NAME=${ROOT_MODULE_NAME}
+
+# Dual-mode startup: pre-compiled registry or live-compile fallback.
+CMD ["sh", "-c", "\
+  if [ -f /app/mcp_module/mcp_registry.json ]; then \
+    echo 'Using pre-compiled MCP registry.' && \
+    cat /app/mcp_module/mcp_registry.json > ${MCP_REGISTRY_PATH}; \
+  else \
+    echo 'No pre-compiled registry. Compiling from live service...' && \
+    until python -c \"import httpx; httpx.get('${SERVICE_URL}/ready', timeout=2).raise_for_status()\" 2>/dev/null; do \
+      echo 'Service not ready, retrying in 2s...'; sleep 2; \
+    done && \
+    CFLAGS=''; \
+    [ -f /app/mcp_module/mcp_config.py ] && CFLAGS=\"$CFLAGS --config /app/mcp_module/mcp_config.py\"; \
+    [ -f /app/mcp_module/analysis/02_pii_map.json ] && CFLAGS=\"$CFLAGS --pii-map /app/mcp_module/analysis/02_pii_map.json\"; \
+    python mcp_scripts/compile_registry.py ${SERVICE_URL}/openapi.json ${MCP_REGISTRY_PATH} --name ${ROOT_MODULE_NAME:-mycel} $CFLAGS; \
+  fi && \
+  echo \"Starting MCP server on port ${MCP_PORT}...\" && \
+  python -m src.server"]

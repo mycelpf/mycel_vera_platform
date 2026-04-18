@@ -1,0 +1,64 @@
+# mycel_vera_platform/mycel_vera_platform_infra/dockerfile/Dockerfile.web
+#
+# platform web image — composed atop mycel_enterprise_web-builder.
+#
+# Composition chain:
+#   mycel_core_web-builder
+#     └── mycel_enterprise_web-builder  (enterprise source + auth in node_modules)
+#           └── mycel_vera_platform_web (vera pages + nav, this stage)
+#
+# Auth (LoginPage, AuthProvider, useAuth) is inherited from enterprise — no
+# per-module auth code needed. IAM SSO works automatically.
+
+ARG ENTERPRISE_VERSION=latest
+ARG ROOT_MODULE_NAME=mycel_vera_platform
+ARG ROOT_MODULE_PATH=mycel_vera_platform
+
+# ---- Module builder ---------------------------------------------------------
+FROM ghcr.io/mycelpf/mycel_enterprise_web-builder:${ENTERPRISE_VERSION} AS module-builder
+
+ARG ROOT_MODULE_NAME
+ARG ROOT_MODULE_PATH
+
+WORKDIR /app
+
+# Copy vera source directly into node_modules — no npm install.
+# Vera has no runtime deps (only peerDeps hoisted from core/enterprise).
+COPY ${ROOT_MODULE_PATH}/${ROOT_MODULE_NAME}_web/package.json /app/node_modules/${ROOT_MODULE_NAME}_web/package.json
+COPY ${ROOT_MODULE_PATH}/${ROOT_MODULE_NAME}_web/src          /app/node_modules/${ROOT_MODULE_NAME}_web/src
+
+ENV ROOT_MODULE_NAME=${ROOT_MODULE_NAME}
+ENV MYCEL_REGISTRY_PATH=/app/node_modules/${ROOT_MODULE_NAME}_web/src/mycel_registry.ts
+RUN node scripts/generate-registry.js
+
+ENV MYCEL_REGISTRY_PATH=./node_modules/${ROOT_MODULE_NAME}_web/src/mycel_registry.ts
+ENV MYCEL_TRANSPILE_MODULES=mycel_enterprise_web,${ROOT_MODULE_NAME}_web
+RUN npm run build
+
+# ---- Runtime ----------------------------------------------------------------
+FROM node:24-alpine AS runtime
+RUN addgroup -S -g 1001 appuser \
+ && adduser  -S -u 1001 -G appuser -H -s /sbin/nologin appuser
+WORKDIR /app
+
+COPY --from=module-builder --chown=1001:1001 /app/public           ./public
+COPY --from=module-builder --chown=1001:1001 /app/.next/standalone ./
+COPY --from=module-builder --chown=1001:1001 /app/.next/static     ./.next/static
+
+RUN printf '#!/bin/sh\nif [ "$ACCEPT_LICENSE" != "yes" ]; then\n  echo "========================================================"\n  echo "  PROPRIETARY SOFTWARE — CogniWorks"\n  echo "  You must accept the license to use this software."\n  echo "  Set ACCEPT_LICENSE=yes to accept."\n  echo "  See LICENSE for full terms."\n  echo "========================================================"\n  exit 1\nfi\nexec "$@"\n' > /usr/local/bin/entrypoint.sh \
+ && chmod +x /usr/local/bin/entrypoint.sh
+
+USER appuser
+ENV NODE_ENV=production \
+    PORT=3002 \
+    HOSTNAME=0.0.0.0 \
+    NODE_OPTIONS="--max-old-space-size=384" \
+    NODE_COMPILE_CACHE=/tmp/.node-compile-cache
+EXPOSE 3002
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:'+process.env.PORT+'/', r => process.exit(r.statusCode >= 200 && r.statusCode < 400 ? 0 : 1)).on('error', () => process.exit(1))"
+LABEL mycel.artifact.type="web" \
+      mycel.platform.runtime="nextjs-standalone" \
+      mycel.base.distro="alpine"
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["node", "server.js"]
